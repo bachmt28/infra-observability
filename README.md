@@ -4,23 +4,39 @@ Cấu hình monitoring/logging/tracing của cluster `k8s-cluster-example`, gom 
 (`/root/git/infra-loki`, `/root/git/infra-kube-prometheus-stack`, `/root/git/infra-tempo`,
 `/root/git/infra-telegraf`, `/root/opentelemetry-operator.yaml`) và từ cấu hình sống trên cluster.
 
-Chưa đồng bộ GitLab — repo hiện chỉ tồn tại local, xem mục "Việc còn lại".
+Đã đồng bộ GitLab nội bộ `system/infra-observability` (bản thật) và GitHub
+`bachmt28/infra-observability` (bản sanitize, public).
 
-## Kiến trúc pipeline
+## Sơ đồ hiện trạng
 
 ```
-AIX/CORE (syslog) ──┐
-                    ├──► otel-dms-agent (DaemonSet, 52 node, ns app-otel)
-Container logs ─────┘         filelog + k8s_attributes + mask OTP
-App OTLP ───────────────────►      │
-                                    ▼
-                    otel-deploy-gateway (Deployment, ns app-otel)
-                    nhận: otlp:4317/4318, syslog tcp/udp:54527
-                                    │
-        ┌──────────┬──────────┬────┴──────┬─────────────┬──────────────┐
-        ▼          ▼          ▼           ▼             ▼              ▼
-      Loki      Kafka     Prometheus   Tempo (chết)  logmon (ngoài) netdata (ngoài)
+Nguồn dữ liệu
+  AIX/CORE (syslog tcp/udp) ─┐
+  Container log (app-* ns)  ─┼──► otel-dms-agent (DaemonSet, 52/52 node, ns app-otel)  [ĐANG CHẠY]
+  App gửi OTLP thẳng       ─┘        filelog + k8s_attributes + mask OTP (<otp>***</otp>)
+                                            │  load-balance (DNS)
+                                            ▼
+                            otel-deploy-gateway (Deployment 1 replica, ns app-otel)  [ĐANG CHẠY]
+                            nhận: otlp :4317/:4318, syslog tcp/udp :54527
+                                            │
+        ┌──────────────┬──────────┬────────┼──────────┬───────────────┬────────────────┐
+        ▼              ▼          ▼        ▼          ▼               ▼                ▼
+      Loki           Kafka    Prometheus  Tempo    logmon (ngoài)  netdata (ngoài)
+   [ĐANG CHẠY]    3 topic    remote_write [CHẾT —  10.10.0.21   10.10.0.21
+   ns app-otel     OTEL_CORE_   :9090     service    :14317          :4317
+                  AIX_*                  không tồn
+                                         tại, xem
+                                        "Vấn đề đã
+                                          biết"]
+        │                                  │
+        ▼                                  ▼
+  Grafana Explore /              Prometheus + Grafana + Alertmanager
+  dashboard "APM - Loki Log"     (kube-prometheus-stack, ns app-kube-pg-stack)  [ĐANG CHẠY]
+  (docs/loki-grafana-setup.md)
 ```
+
+Cài đặt từng cấu phần trên: `docs/cai-dat.md`. Trỏ Grafana vào Loki + dashboard log:
+`docs/loki-grafana-setup.md`.
 
 ## Cấu phần
 
@@ -59,6 +75,6 @@ Cả 2 file CR trong `otel/` lấy trực tiếp từ cluster (`kubectl get open
 
 ## Việc còn lại
 
-- Đồng bộ GitLab nội bộ: git init + push, box pull về `/root/git/infra-observability` thay vì
-  rải rác 4 thư mục như trước.
-- Dựng lại Tempo, dùng `tempo/values.yaml` làm nền.
+- Box Jenkins chưa pull repo này về — vẫn còn rải rác 4 thư mục cũ ở `/root/git/infra-loki` v.v.
+  Khi cần: `git clone` repo này vào `/root/git/infra-observability` trên box, dọn 4 thư mục cũ.
+- Dựng lại Tempo — xem `docs/cai-dat.md` mục Tempo.
