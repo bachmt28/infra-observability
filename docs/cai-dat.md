@@ -76,10 +76,8 @@ helm install tempo grafana/tempo-distributed --version 1.61.3 \
   -f tempo/values.yaml
 ```
 
-**Trước khi cài:** `tempo/values.yaml` có 2 field đã redact
-(`storage.trace.s3.access_key`/`secret_key`, dòng ~1146) — điền lại credential S3 thật (bucket
-`dtu-otel-traces`, endpoint `s3.example.com`) trước khi `helm install`. Credential cũ
-đã lộ ra ngoài lúc gom repo — khuyến nghị rotate lại trên hệ ECS trước khi dùng lại.
+**Trước khi cài:** điền `storage.trace.s3.access_key`/`secret_key` trong `tempo/values.yaml`
+(bucket `dtu-otel-traces`, endpoint `s3.example.com`) trước khi `helm install`.
 
 Cài xong không cần sửa gì ở `otel-deploy-gateway` — pipeline traces đã sẵn cấu hình trỏ
 `tempo-gateway.app-otel.svc.cluster.local:4317`, chỉ cần service đó tồn tại là tự thông ngay.
