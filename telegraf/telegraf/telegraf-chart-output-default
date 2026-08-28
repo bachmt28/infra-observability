@@ -1,0 +1,1474 @@
+==> ./Chart.yaml <==
+apiVersion: v2
+appVersion: 1.38.3
+description: Telegraf is an agent written in Go for collecting, processing, aggregating,
+  and writing metrics.
+home: https://www.influxdata.com/time-series-platform/telegraf/
+icon: https://avatars0.githubusercontent.com/u/5713248?s=200&v=4
+keywords:
+- telegraf
+- collector
+- timeseries
+- influxdata
+- influxdb
+- agent
+maintainers:
+- email: rawkode@influxdata.com
+  name: rawkode
+- email: giacomo@influxdata.com
+  name: gitirabassi
+name: telegraf
+sources:
+- https://github.com/influxdata/helm-charts/tree/master/charts/telegraf
+- https://github.com/influxdata/helm-charts/
+version: 1.8.70
+
+==> ./values.yaml <==
+## Default values.yaml for Telegraf
+## This is a YAML-formatted file.
+## ref: https://hub.docker.com/r/library/telegraf/tags/
+
+replicaCount: 1
+image:
+  repo: "docker.io/library/telegraf"
+  tag: "1.38-alpine"
+  pullPolicy: IfNotPresent
+podAnnotations: {}
+podLabels: {}
+imagePullSecrets: []
+## Configure args passed to Telegraf containers
+args: []
+# The name of a secret in the same kubernetes namespace which contains values to
+# be added to the environment (must be manually created)
+# This can be useful for auth tokens, etc.
+
+## Init containers to run before Telegraf starts
+## Useful for waiting on dependencies, preparing configs, or setting permissions
+## Example:
+# initContainers:
+#   - name: wait-for-service
+#     image: busybox:1.36
+#     command: ['sh', '-c', 'until nc -z myservice 8086; do sleep 1; done']
+initContainers: []
+# envFromSecret: "telegraf-tokens"
+env:
+  - name: HOSTNAME
+    value: "telegraf-polling-service"
+# An older "volumeMounts" key was previously added which will likely
+# NOT WORK as you expect. Please use this newer configuration.
+
+# volumes:
+# - name: telegraf-output-influxdb2
+#   configMap:
+#     name: "telegraf-output-influxdb2"
+# mountPoints:
+# - name: telegraf-output-influxdb2
+#   mountPath: /etc/telegraf/conf.d
+#   subPath: influxdb2.conf
+
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+resources: {}
+# requests:
+#   memory: 128Mi
+#   cpu: 100m
+# limits:
+#   memory: 128Mi
+#   cpu: 100m
+
+## Node labels for pod assignment
+## ref: https://kubernetes.io/docs/user-guide/node-selection/
+nodeSelector: {}
+## Affinity for pod assignment
+## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+##
+affinity: {}
+## Tolerations for pod assignment
+## Ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+##
+tolerations: []
+# - key: "key"
+#   operator: "Equal|Exists"
+#   value: "value"
+#   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+
+## Configure the updateStrategy used to replace Telegraf Pods
+## See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/
+updateStrategy: {}
+#  type: RollingUpdate|Recreate
+#  rollingUpdate:
+#    maxUnavailable: 1
+#    maxSurge: 1
+
+service:
+  enabled: true
+  type: ClusterIP
+  annotations: {}
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  # Create only for the release namespace or cluster wide (Role vs ClusterRole)
+  clusterWide: false
+  # Rules for the created rule
+  rules: []
+# When using the prometheus input to scrape all pods you need extra rules set to the ClusterRole to be
+# able to scan the pods for scraping labels. The following rules have been taken from:
+# https://github.com/helm/charts/blob/master/stable/prometheus/templates/server-clusterrole.yaml#L8-L46
+#    - apiGroups:
+#        - ""
+#      resources:
+#        - nodes
+#        - nodes/proxy
+#        - nodes/metrics
+#        - services
+#        - endpoints
+#        - pods
+#        - ingresses
+#        - configmaps
+#      verbs:
+#        - get
+#        - list
+#        - watch
+#    - apiGroups:
+#        - "extensions"
+#      resources:
+#        - ingresses/status
+#        - ingresses
+#      verbs:
+#        - get
+#        - list
+#        - watch
+#    - nonResourceURLs:
+#        - "/metrics"
+#      verbs:
+#        - get
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  # Annotations for the ServiceAccount
+  annotations: {}
+## Specify priorityClassName
+## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# priorityClassName: system-node-critical
+
+## Exposed telegraf configuration
+## For full list of possible values see `/docs/all-config-values.yaml` and `/docs/all-config-values.toml`
+## ref: https://docs.influxdata.com/telegraf/v1.1/administration/configuration/
+config:
+  agent:
+    interval: "10s"
+    round_interval: true
+    metric_batch_size: 1000
+    metric_buffer_limit: 10000
+    collection_jitter: "0s"
+    flush_interval: "10s"
+    flush_jitter: "0s"
+    precision: ""
+    debug: false
+    quiet: false
+    logfile: ""
+    hostname: "$HOSTNAME"
+    omit_hostname: false
+  processors:
+    - enum:
+        mapping:
+          field: "status"
+          dest: "status_code"
+          value_mappings:
+            healthy: 1
+            problem: 2
+            critical: 3
+  outputs:
+    - influxdb:
+        urls:
+          - "http://influxdb.monitoring.svc:8086"
+        database: "telegraf"
+  inputs:
+    - statsd:
+        service_address: ":8125"
+        percentiles:
+          - 50
+          - 95
+          - 99
+        metric_separator: "_"
+        allowed_pending_messages: 10000
+        percentile_limit: 1000
+metrics:
+  health:
+    enabled: false
+    service_address: "http://:8888"
+    threshold: 5000.0
+  internal:
+    enabled: true
+    collect_memstats: false
+# Lifecycle hooks
+# hooks:
+#   postStart: ["/bin/sh", "-c", "echo Telegraf started"]
+#   preStop: ["/bin/sh", "-c", "sleep 60"]
+
+## Pod disruption budget configuration
+##
+pdb:
+  ## Specifies whether a Pod disruption budget should be created
+  ##
+  create: true
+  minAvailable: 1
+  # maxUnavailable: 1
+# containerPorts:
+# - name: http
+#   containerPort: 9273
+#   protocol: TCP
+
+==> ./templates/_helpers.tpl <==
+{{/* vim: set filetype=mustache: */}}
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "telegraf.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "telegraf.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "telegraf.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Common labels
+*/}}
+{{- define "telegraf.labels" -}}
+helm.sh/chart: {{ include "telegraf.chart" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{ include "telegraf.selectorLabels" . }}
+{{- end -}}
+
+{{/*
+Selector labels
+*/}}
+{{- define "telegraf.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "telegraf.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+
+{{/*
+  CUSTOM TEMPLATES: This section contains templates that make up the different parts of the telegraf configuration file.
+  - global_tags section
+  - agent section
+*/}}
+
+{{- define "global_tags" -}}
+{{- if . -}}
+[global_tags]
+  {{- range $key, $val := . }}
+      {{ $key }} = {{ $val | quote }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{- define "agent" -}}
+[agent]
+{{- range $key, $value := . -}}
+  {{- $tp := typeOf $value }}
+  {{- if eq $tp "string"}}
+      {{ $key }} = {{ $value | quote }}
+  {{- end }}
+  {{- if eq $tp "float64"}}
+      {{ $key }} = {{ $value | int64 }}
+  {{- end }}
+  {{- if eq $tp "int"}}
+      {{ $key }} = {{ $value | int64 }}
+  {{- end }}
+  {{- if eq $tp "bool"}}
+      {{ $key }} = {{ $value }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{- define "outputs.v1" -}}
+{{- range $outputIdx, $configObject := . -}}
+    {{- range $output, $config := . -}}
+
+    [[outputs.{{- $output }}]]
+    {{- if $config -}}
+    {{- $tp := typeOf $config -}}
+    {{- if eq $tp "map[string]interface {}" -}}
+        {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "string" }}
+      {{ $key }} = {{ $value | quote }}
+          {{- end }}
+          {{- if eq $tp "float64" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "int" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "bool" }}
+      {{ $key }} = {{ $value }}
+          {{- end }}
+          {{- if eq $tp "[]interface {}" }}
+      {{ $key }} = [
+              {{- $numOut := len $value }}
+              {{- $numOut := sub $numOut 1 }}
+              {{- range $b, $val := $value }}
+                {{- $i := int64 $b }}
+                {{- $tp := typeOf $val }}
+                {{- if eq $i $numOut }}
+                  {{- if eq $tp "string" }}
+        {{ $val | quote }}
+                  {{- end }}
+                  {{- if eq $tp "float64" }}
+        {{ $val | int64 }}
+                  {{- end }}
+                {{- else }}
+                  {{- if eq $tp "string" }}
+        {{ $val | quote }},
+                  {{- end}}
+                  {{- if eq $tp "float64" }}
+        {{ $val | int64 }},
+                  {{- end }}
+                {{- end }}
+              {{- end }}
+      ]
+          {{- end }}
+        {{- end }}
+        {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "map[string]interface {}" }}
+      [outputs.{{ $output }}.{{ $key }}]
+            {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "string" }}
+        {{ $k }} = {{ $v | quote }}
+              {{- end }}
+              {{- if eq $tps "float64" }}
+        {{ $k }} = {{ $v | int64 }}.0
+              {{- end }}
+              {{- if eq $tps "int64" }}
+        {{ $k }} = {{ $v | int64 }}
+              {{- end }}
+              {{- if eq $tps "bool" }}
+        {{ $k }} = {{ $v }}
+              {{- end }}
+              {{- if eq $tps "[]interface {}"}}
+        {{ $k }} = [
+                {{- $numOut := len $v }}
+                {{- $numOut := sub $numOut 1 }}
+                {{- range $b, $val := $v }}
+                  {{- $i := int64 $b }}
+                  {{- if eq $i $numOut }}
+            {{ $val | quote }}
+                  {{- else }}
+            {{ $val | quote }},
+                  {{- end }}
+                {{- end }}
+        ]
+              {{- end }}
+              {{- if eq $tps "map[string]interface {}"}}
+          [outputs.{{ $output }}.{{ $key }}.{{ $k }}]
+                {{- range $foo, $bar := $v }}
+            {{ $foo }} = {{ $bar | quote }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+    {{- end }}
+    {{- end }}
+    {{ end }}
+{{- end }}
+{{- end -}}
+
+{{- define "inputs.v1" -}}
+{{- range $inputIdx, $configObject := . -}}
+    {{- range $input, $config := . -}}
+
+    [[inputs.{{- $input }}]]
+    {{- if $config -}}
+    {{- $tp := typeOf $config -}}
+    {{- if eq $tp "map[string]interface {}" -}}
+        {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "string" }}
+      {{ $key }} = {{ $value | quote }}
+          {{- end }}
+          {{- if eq $tp "float64" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "int" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "bool" }}
+      {{ $key }} = {{ $value }}
+          {{- end }}
+          {{- if eq $tp "[]interface {}" }}
+            {{- if eq (index $value 0 | typeOf) "map[string]interface {}" -}}
+              {{- range $b, $val := $value }}
+      [[inputs.{{- $input }}.{{- $key }}]]
+                {{- range $k, $v := $val }}
+                  {{- $tps := typeOf $v }}
+                  {{- if eq $tps "string" }}
+         {{ $k }} = {{ $v | quote }}
+                  {{- end }}
+                  {{- if eq $tps "float64" }}
+         {{ $k }} = {{ $v | int64 }}
+                  {{- end }}
+                  {{- if eq $tps "bool" }}
+         {{ $k }} = {{ $v }}
+                  {{- end }}
+                {{- end }}
+              {{- end }}
+            {{- else }}
+      {{ $key }} = [
+              {{- $numOut := len $value }}
+              {{- $numOut := sub $numOut 1 }}
+              {{- range $b, $val := $value }}
+                {{- $i := int64 $b }}
+                {{- $tp := typeOf $val }}
+                {{- if eq $tp "string" }}
+        {{ $val | quote }}
+                {{- end }}
+                {{- if eq $tp "float64" }}
+                  {{- if eq $key "percentiles" }}
+                    {{- $xval := float64 (int64 $val) }}
+                    {{- if eq $val $xval }}
+        {{ $val | int64 }}.0
+                    {{- else }}
+        {{ $val | float64 }}
+                    {{- end }}
+                  {{- else }}
+        {{ $val | int64 }}
+                  {{- end }}
+                {{- end }}
+                {{- if ne $i $numOut -}}
+        ,
+                {{- end -}}
+              {{- end }}
+      ]
+            {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "map[string]interface {}" }}
+      [inputs.{{ $input }}.{{ $key }}]
+            {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "string" }}
+        {{ $k }} = {{ $v | quote }}
+              {{- end }}
+              {{- if eq $tps "[]interface {}"}}
+        {{ $k }} = [
+                {{- $numOut := len $v }}
+                {{- $numOut := sub $numOut 1 }}
+                {{- range $b, $val := $v }}
+                  {{- $i := int64 $b }}
+                  {{- if eq $i $numOut }}
+            {{ $val | quote }}
+                  {{- else }}
+            {{ $val | quote }},
+                  {{- end }}
+                {{- end }}
+        ]
+              {{- end }}
+              {{- end }}
+              {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "map[string]interface {}"}}
+          [inputs.{{ $input }}.{{ $key }}.{{ $k }}]
+                {{- range $foo, $bar := $v }}
+            {{ $foo }} = {{ $bar | quote }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+    {{- end }}
+    {{- end }}
+    {{ end }}
+{{- end }}
+{{- end -}}
+
+{{- define "processors.v1" -}}
+{{- range $processorIdx, $configObject := . -}}
+    {{- range $processor, $config := . -}}
+
+    [[processors.{{- $processor }}]]
+    {{- if $config -}}
+    {{- $tp := typeOf $config -}}
+    {{- if eq $tp "map[string]interface {}" -}}
+        {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "string" }}
+      {{ $key }} = {{ $value | quote }}
+          {{- end }}
+          {{- if eq $tp "float64" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "int" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "bool" }}
+      {{ $key }} = {{ $value }}
+          {{- end }}
+          {{- if eq $tp "[]interface {}" }}
+      {{ $key }} = [
+              {{- $numOut := len $value }}
+              {{- $numOut := sub $numOut 1 }}
+              {{- range $b, $val := $value }}
+                {{- $i := int64 $b }}
+                {{- $tp := typeOf $val }}
+                {{- if eq $i $numOut }}
+                  {{- if eq $tp "string" }}
+        {{ $val | quote }}
+                  {{- end }}
+                  {{- if eq $tp "float64" }}
+        {{ $val | int64 }}
+                  {{- end }}
+                {{- else }}
+                  {{- if eq $tp "string" }}
+        {{ $val | quote }},
+                  {{- end}}
+                  {{- if eq $tp "float64" }}
+        {{ $val | int64 }},
+                  {{- end }}
+                {{- end }}
+              {{- end }}
+      ]
+          {{- end }}
+          {{- end }}
+          {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "map[string]interface {}" }}
+      {{- if or (eq $processor "converter") (eq $processor "override") (eq $processor "clone") }}
+      [processors.{{ $processor }}.{{ $key }}]
+            {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "string" }}
+        {{ $k }} = {{ $v | quote }}
+              {{- end }}
+              {{- if eq $tps "[]interface {}"}}
+        {{ $k }} = [
+                {{- $numOut := len $v }}
+                {{- $numOut := sub $numOut 1 }}
+                {{- range $b, $val := $v }}
+                  {{- $i := int64 $b }}
+                  {{- if eq $i $numOut }}
+            {{ $val | quote }}
+                  {{- else }}
+            {{ $val | quote }},
+                  {{- end }}
+                {{- end }}
+        ]
+              {{- end }}
+              {{- end }}
+      {{- else }}
+       [[processors.{{ $processor }}.{{ $key }}]]
+            {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "string" }}
+        {{ $k }} = {{ $v | quote }}
+              {{- end }}
+              {{- if eq $tps "[]interface {}"}}
+        {{ $k }} = [
+                {{- $numOut := len $v }}
+                {{- $numOut := sub $numOut 1 }}
+                {{- range $b, $val := $v }}
+                  {{- $i := int64 $b }}
+                  {{- if eq $i $numOut }}
+            {{ $val | quote }}
+                  {{- else }}
+            {{ $val | quote }},
+                  {{- end }}
+                {{- end }}
+        ]
+              {{- end }}
+              {{- end }}
+              {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "map[string]interface {}"}}
+        [processors.{{ $processor }}.{{ $key }}.{{ $k }}]
+                {{- range $foo, $bar := $v }}
+                {{- $tp := typeOf $bar -}}
+                {{- if eq $tp "string" }}
+            {{ $foo }} = {{ $bar | quote }}
+                {{- end }}
+                {{- if eq $tp "int" }}
+            {{ $foo }} = {{ $bar }}
+                {{- end }}
+                {{- if eq $tp "float64" }}
+            {{ $foo }} = {{ int64 $bar }}
+                {{- end }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{ end }}
+{{- end }}
+{{- end -}}
+
+{{- define "aggregators.v1" -}}
+{{- range $aggregatorIdx, $configObject := . -}}
+    {{- range $aggregator, $config := . -}}
+
+    [[aggregators.{{- $aggregator }}]]
+    {{- if $config -}}
+    {{- $tp := typeOf $config -}}
+    {{- if eq $tp "map[string]interface {}" -}}
+        {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "string" }}
+      {{ $key }} = {{ $value | quote }}
+          {{- end }}
+          {{- if eq $tp "float64" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "int" }}
+      {{ $key }} = {{ $value | int64 }}
+          {{- end }}
+          {{- if eq $tp "bool" }}
+      {{ $key }} = {{ $value }}
+          {{- end }}
+          {{- if eq $tp "[]interface {}" }}
+      {{ $key }} = [
+              {{- $numOut := len $value }}
+              {{- $numOut := sub $numOut 1 }}
+              {{- range $b, $val := $value }}
+                {{- $i := int64 $b }}
+                {{- $tp := typeOf $val }}
+                {{- if eq $i $numOut }}
+                  {{- if eq $tp "string" }}
+        {{ $val | quote }}
+                  {{- end }}
+                  {{- if eq $tp "float64" }}
+        {{ $val | int64 }}
+                  {{- end }}
+                {{- else }}
+                  {{- if eq $tp "string" }}
+        {{ $val | quote }},
+                  {{- end}}
+                  {{- if eq $tp "float64" }}
+        {{ $val | int64 }},
+                  {{- end }}
+                {{- end }}
+              {{- end }}
+      ]
+          {{- end }}
+          {{- end }}
+          {{- range $key, $value := $config -}}
+          {{- $tp := typeOf $value -}}
+          {{- if eq $tp "map[string]interface {}" }}
+          {{- if or (eq $key "tagpass") (eq $key "tagdrop") }}
+      [aggregators.{{ $aggregator }}.{{ $key }}]
+          {{- else }}
+      [[aggregators.{{ $aggregator }}.{{ $key }}]]
+          {{- end }}
+            {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "string" }}
+        {{ $k }} = {{ $v | quote }}
+              {{- end }}
+              {{- if eq $tps "[]interface {}"}}
+        {{ $k }} = [
+                {{- $numOut := len $v }}
+                {{- $numOut := sub $numOut 1 }}
+                {{- range $b, $val := $v }}
+                  {{- $i := int64 $b }}
+                  {{- $tv := typeOf $val -}}
+                  {{- if eq $i $numOut }}
+                      {{- if eq $tv "string" }}
+                  {{ $val | quote }}
+                      {{- end }}
+                      {{- if eq $tv "float64" }}
+                        {{- $xval := float64 (int64 $val) -}}
+                        {{- if eq $val $xval -}}
+                  {{ $val | float64 }}.0
+                        {{- else -}}
+                  {{ $val | float64 }}
+                        {{- end -}}
+                      {{- end }}
+                      {{- if eq $tv "int64" }}
+                  {{ $val | int64 }}
+                      {{- end }}
+                  {{- else }}
+                      {{- if eq $tv "string" }}
+                  {{ $val | quote }},
+                      {{- end }}
+                      {{- if eq $tv "float64" }}
+                        {{- $xval := float64 (int64 $val) -}}
+                        {{- if eq $val $xval -}}
+                  {{ $val | float64 }}.0,
+                        {{- else -}}
+                  {{ $val | float64 }},
+                        {{- end -}}
+                      {{- end }}
+                      {{- if eq $tv "int64" }}
+                  {{ $val | int64 }},
+                      {{- end }}
+                  {{- end }}
+                {{- end }}
+        ]
+              {{- end }}
+              {{- end }}
+              {{- range $k, $v := $value }}
+              {{- $tps := typeOf $v }}
+              {{- if eq $tps "map[string]interface {}"}}
+        [aggregators.{{ $aggregator }}.{{ $key }}.{{ $k }}]
+                {{- range $foo, $bar := $v }}
+                {{- $tp := typeOf $bar -}}
+                {{- if eq $tp "string" }}
+            {{ $foo }} = {{ $bar | quote }}
+                {{- end }}
+                {{- if eq $tp "int" }}
+            {{ $foo }} = {{ $bar }}
+                {{- end }}
+                {{- if eq $tp "float64" }}
+            {{ $foo }} = {{ int64 $bar }}
+                {{- end }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+    {{- end }}
+    {{- end }}
+    {{ end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Backward compatible version support.
+*/}}
+
+{{- define "outputs" -}}
+{{- include "section" (prepend . "outputs") -}}
+{{- end -}}
+
+{{- define "inputs" -}}
+{{- include "section" (prepend . "inputs") -}}
+{{- end -}}
+
+{{- define "processors" -}}
+{{- include "section" (prepend . "processors") -}}
+{{- end -}}
+
+{{- define "aggregators" -}}
+{{- include "section" (prepend . "aggregators") -}}
+{{- end -}}
+
+{{- define "detect.version" -}}
+{{ (default 1 .Values.tplVersion) | int64 }}
+{{- end -}}
+
+{{- define "section" -}}
+{{- $name := index . 0 -}}
+{{- $version := index . 1 | int64 -}}
+{{- $suffix := ternary "v2" "v1" (eq 2 $version) -}}
+{{- $templateName := printf "%s.%s" $name $suffix -}}
+{{- with index . 2 -}}
+  {{ include $templateName . }}
+{{- end }}
+{{- end -}}
+
+{{- define "processors.v2" -}}
+  {{ include "section.v2" (list "processors" .) }}
+{{- end -}}
+
+{{- define "aggregators.v2" -}}
+  {{ include "section.v2" (list "aggregators" .) }}
+{{- end -}}
+
+{{- define "inputs.v2" -}}
+  {{ include "section.v2" (list "inputs" .) }}
+{{- end -}}
+
+{{- define "outputs.v2" -}}
+  {{ include "section.v2" (list "outputs" .) }}
+{{- end -}}
+
+{{- define "section.v2" -}}
+{{- $name := index . 0 -}}
+{{- with index . 1 -}}
+{{- range $itemIdx, $configObject := . -}}
+    {{- range $item, $config := . }}
+    [[{{ $name }}.{{- $item }}]]
+    {{- if $config -}}
+    {{- $tp := typeOf $config -}}
+    {{- if eq $tp "map[string]interface {}" -}}
+      {{- $args := dict "key" $item "value" $config "level" 1 "type" $name -}}
+      {{ include "any.table" $args }}
+    {{- end }}
+    {{- end }}
+    {{ end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Renders indented table.
+*/}}
+
+{{- define "any.table" -}}
+{{- $n := (mul .level 2) | add 2 | int }}
+{{- $args := dict "key" .key "value" .value "type" .type -}}
+{{- include "any.table.raw" $args | indent $n }}
+{{- end }}
+
+{{/*
+Renders a table.
+Renders primitive and arrays of primitive types first, then nested tables and arrays of nested tables.
+*/}}
+
+{{- define "any.table.raw" -}}
+{{- $key := .key }}
+{{- $type := .type }}
+{{- range $k, $v := .value }}
+  {{- $tps := typeOf $v }}
+  {{- if eq $tps "string" }}
+  {{ $k }} = {{ $v | quote }}
+  {{- else if eq $tps "float64" }}
+    {{- $rv := float64 (int64 $v) }}
+    {{- if eq $rv $v }}
+  {{ $k }} = {{ $v | int64 }}
+    {{- else }}
+  {{ $k }} = {{ $v }}
+    {{- end }}
+  {{- else if eq $tps "int64" }}
+  {{ $k }} = {{ $v }}
+  {{- else if eq $tps "bool" }}
+  {{ $k }} = {{ $v }}
+  {{- else if eq $tps "[]interface {}" }}
+    {{- if ne (index $v 0 | typeOf) "map[string]interface {}" }}
+  {{ $k }} = [
+      {{- $numOut := len $v }}
+      {{- $numOut := sub $numOut 1 }}
+      {{- range $b, $xv := $v }}
+        {{- $i := int64 $b }}
+        {{- $xtps := typeOf $xv }}
+        {{- if eq $xtps "string" }}
+    {{ $xv | quote }}
+        {{- else if eq $xtps "float64" }}
+          {{- $rxv := float64 (int64 $xv) }}
+          {{- if eq $rxv $xv }}
+            {{- if eq $k "percentiles" }}
+    {{ $xv | int64 }}.0
+            {{- else }}
+    {{ $xv | int64 }}
+            {{- end }}
+          {{- else }}
+    {{ $xv }}
+          {{- end }}
+        {{- else if eq $xtps "int64" }}
+    {{ $xv }}
+        {{- end }}
+        {{- if ne $i $numOut -}}
+        ,
+        {{- end -}}
+      {{- end }}
+  ]
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- range $k, $v := .value }}
+  {{- $tps := typeOf $v }}
+  {{- if eq $tps "map[string]interface {}" }}
+      {{- $args := dict "key" (printf "%s.%s" $key $k) "value" $v "type" $type }}
+      {{- /* hack for existing incorrect mapping in values.yaml */ -}}
+      {{- if eq "processors.enum.mapping" (printf "%s.%s" $type $args.key) }}
+  [[{{ $type }}.{{ $args.key }}]]
+      {{- else }}
+  [{{ $type }}.{{ $args.key }}]
+      {{- end }}
+      {{- include "any.table" $args -}}
+  {{- else if eq $tps "[]interface {}" }}
+    {{- if eq (index $v 0 | typeOf) "map[string]interface {}" }}
+      {{- range $b, $xv := $v }}
+        {{- $args := dict "key" (printf "%s.%s" $key $k) "value" $xv  "type" $type }}
+  [[{{ $type }}.{{ $args.key }}]]
+        {{- include "any.table" $args -}}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "telegraf.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+    {{ default (include "telegraf.fullname" .) .Values.serviceAccount.name }}
+{{- else -}}
+    {{ default "default" .Values.serviceAccount.name }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Get health configuration
+*/}}
+{{- define "telegraf.health" -}}
+{{- if .Values.metrics.health.enabled -}}
+    {{- .Values.metrics.health | toYaml -}}
+{{- else -}}
+    {{- $health := dict -}}
+    {{- range $objectKey, $objectValue := .Values.config.outputs }}
+        {{- range $key, $value := . -}}
+        {{- if eq $key "health" -}}
+            {{- $health = $value -}}
+        {{- end -}}
+        {{- end -}}
+    {{- end }}
+    {{- $health | toYaml -}}
+{{- end -}}
+{{- end -}}
+
+==> ./templates/configmap.yaml <==
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "telegraf.fullname" . }}
+  labels:
+    {{- include "telegraf.labels" . | nindent 4 }}
+data:
+  telegraf.conf: |+
+    {{- $tplVersion := include "detect.version" . }}
+    {{ template "global_tags" .Values.config.global_tags }}
+    {{ template "agent" .Values.config.agent }}
+    {{ template "processors" (list $tplVersion .Values.config.processors) }}
+    {{ template "aggregators" (list $tplVersion .Values.config.aggregators) }}
+    {{ template "outputs" (list $tplVersion .Values.config.outputs) }}
+    {{- if .Values.metrics.health.enabled }}
+    [[outputs.health]]
+      service_address = "{{ .Values.metrics.health.service_address }}"
+      namepass = ["internal_write"]
+      [[outputs.health.compares]]
+        field = "buffer_size"
+        lt = {{ .Values.metrics.health.threshold | int64 }}.0
+      [[outputs.health.contains]]
+        field = "buffer_size"
+    {{- end }}
+    {{ template "inputs" (list $tplVersion .Values.config.inputs) }}
+    {{- if .Values.metrics.internal.enabled }}
+    [[inputs.internal]]
+      collect_memstats = {{ or .Values.metrics.internal.collect_memstats (.Values.metrics.collect_memstats | default false) }}
+    {{- end }}
+
+==> ./templates/deployment.yaml <==
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telegraf.fullname" . }}
+  labels:
+    {{- include "telegraf.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "telegraf.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.updateStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "telegraf.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+{{- with .Values.podLabels }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.podAnnotations }}
+{{ tpl (toYaml .Values.podAnnotations) . | indent 8 }}
+        {{- end }}
+    spec:
+{{- if .Values.securityContext }}
+      securityContext:
+{{ toYaml .Values.securityContext | indent 8 }}
+{{- end }}
+      serviceAccountName: {{ template "telegraf.serviceAccountName" . }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+{{- end }}
+{{- if .Values.initContainers }}
+      initContainers:
+{{ toYaml .Values.initContainers | indent 6 }}
+{{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+{{- if .Values.containerSecurityContext }}
+        securityContext:
+{{ toYaml .Values.containerSecurityContext | indent 10 }}
+{{- end }}
+        image: "{{ .Values.image.repo }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ default "" .Values.image.pullPolicy | quote }}
+{{- if .Values.containerPorts }}
+        ports:
+{{ toYaml .Values.containerPorts | indent 10 }}
+{{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        {{- if .Values.args }}
+        args:
+{{ toYaml .Values.args | indent 8 }}
+        {{- end }}
+        env:
+{{ toYaml .Values.env | indent 8 }}
+{{- if .Values.envFromSecret }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.envFromSecret }}
+{{- end }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/telegraf
+        {{- range .Values.volumeMounts }}
+        - name: {{ .name }}
+          mountPath: {{ .mountPath }}
+        {{- end }}
+        {{- if .Values.mountPoints }}
+{{ toYaml .Values.mountPoints | indent 8 }}
+        {{- end }}
+        {{- if .Values.hooks }}
+        {{- if or (.Values.hooks.postStart) (.Values.hooks.preStop) }}
+        lifecycle:
+        {{- if .Values.hooks.postStart }}
+          postStart:
+            exec:
+              command:
+        {{- range .Values.hooks.postStart }}
+                - {{ . | quote }}
+        {{- end }}
+        {{ end }}
+        {{- if .Values.hooks.preStop }}
+          preStop:
+            exec:
+              command:
+        {{- range .Values.hooks.preStop }}
+                - {{ . | quote }}
+        {{- end }}
+        {{ end }}
+        {{ end }}
+        {{ end }}
+        {{- $health := include "telegraf.health" . | fromYaml }}
+        {{- with $health }}
+        startupProbe:
+          httpGet:
+            path: /
+            port: {{ trimPrefix "http://:" .service_address | int64 }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: {{ trimPrefix "http://:" .service_address | int64 }}
+        readinessProbe:
+          httpGet:
+            path: /
+            port: {{ trimPrefix "http://:" .service_address | int64 }}
+        {{- end }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      {{- end }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "telegraf.fullname" . }}
+      {{- if .Values.volumes }}
+{{ toYaml .Values.volumes | indent 6 }}
+      {{- end }}
+
+==> ./templates/pdb.yaml <==
+{{- if .Values.pdb.create }}
+{{- if .Capabilities.APIVersions.Has "policy/v1" }}
+apiVersion: policy/v1
+{{- else }}
+apiVersion: policy/v1beta1
+{{- end }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "telegraf.fullname" . }}
+  labels:
+  {{- include "telegraf.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.pdb.minAvailable }}
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+  {{- include "telegraf.selectorLabels" . | nindent 6 }}
+  {{- end }}
+
+==> ./templates/role.yaml <==
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+{{- if .Values.rbac.clusterWide }}
+kind: ClusterRole
+{{- else }}
+kind: Role
+{{- end }}
+metadata:
+  name: {{ template "telegraf.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "telegraf.labels" . | nindent 4 }}
+rules:
+{{ toYaml .Values.rbac.rules | indent 2 }}
+{{- end }}
+
+==> ./templates/rolebinding.yaml <==
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+{{- if .Values.rbac.clusterWide }}
+kind: ClusterRoleBinding
+{{- else }}
+kind: RoleBinding
+{{- end }}
+metadata:
+  name: {{ template "telegraf.fullname" . }}
+  labels:
+    {{- include "telegraf.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "telegraf.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  {{- if .Values.rbac.clusterWide }}
+  kind: ClusterRole
+  {{- else }}
+  kind: Role
+  {{- end }}
+  name: {{ template "telegraf.fullname" . }}
+{{- end }}
+
+==> ./templates/service.yaml <==
+{{- if .Values.service.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telegraf.fullname" . }}
+  labels:
+    {{- include "telegraf.labels" . | nindent 4 }}
+  {{- if .Values.service.annotations }}
+  annotations:
+{{ toYaml .Values.service.annotations | indent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  {{- $health := include "telegraf.health" . | fromYaml }}
+  {{- with $health }}
+  - port: {{ trimPrefix "http://:" .service_address | int64 }}
+    targetPort: {{ trimPrefix "http://:" .service_address | int64 }}
+    name: "health"
+  {{- end }}
+  {{- range $objectKey, $objectValue := .Values.config.inputs }}
+  {{- range $key, $value := . -}}
+    {{- $tp := typeOf $value -}}
+    {{- if eq $key "http_listener" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "http-listener"
+    {{- end }}
+    {{- if eq $key "influxdb_listener" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "influxdb-listener"
+    {{- end }}
+    {{- if eq $key "http_listener_v2" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "http-listener-v2"
+    {{- end }}
+    {{- if eq $key "influxdb_v2_listener" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "influxdb-v2-listener"
+    {{- end }}
+    {{- if eq $key "opentelemetry" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "opentelemetry"
+    {{- end }}
+    {{- if eq $key "statsd" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    protocol: "UDP"
+    name: "statsd"
+    {{- end }}
+    {{- if eq $key "tcp_listener" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "tcp-listener"
+    {{- end }}
+    {{- if eq $key "udp_listener" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    protocol: "UDP"
+    name: "udp-listener"
+    {{- end }}
+    {{- if eq $key "webhooks" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    name: "webhooks"
+    {{- end }}
+    {{- if eq $key "syslog" }}
+      {{- if regexMatch "^(tcp|udp).*" $value.server }}
+  - port: {{ regexFind "[0-9]+$" $value.server  | int64 }}
+    targetPort: {{ regexFind "[0-9]+$" $value.server  | int64 }}
+    protocol: {{ upper (substr 0 3 $value.server) }}
+    name: "syslog"
+      {{- end }}
+    {{- end }}
+    {{- if eq $key "socket_listener" }}
+    {{- if or (hasPrefix "udp" $value.service_address) (hasPrefix "tcp" $value.service_address) }}
+  - port: {{ regexFind "[0-9]+$" $value.service_address  | int64 }}
+    targetPort: {{ regexFind "[0-9]+$" $value.service_address  | int64 }}
+    protocol: {{ upper (substr 0 3 $value.service_address) }}
+    name: {{ printf "%s-%s" "socket-listener" (regexFind "[0-9]+$" $value.service_address) }}
+    {{- end }}
+    {{- end }}
+    {{- if eq $key "cisco_telemetry_mdt" }}
+  - port: {{ trimPrefix ":" $value.service_address | int64 }}
+    targetPort: {{ trimPrefix ":" $value.service_address | int64 }}
+    protocol: "TCP"
+    name: "cisco-telemetry-mdt"
+    {{- end }}
+  {{- end -}}
+  {{- end }}
+  {{- range $objectKey, $objectValue := .Values.config.outputs }}
+  {{- range $key, $value := . -}}
+    {{- $tp := typeOf $value -}}
+    {{- if eq $key "prometheus_client" }}
+  - port: {{ trimPrefix ":" $value.listen | int64 }}
+    targetPort: {{ trimPrefix ":" $value.listen | int64 }}
+    name: "prometheus-client"
+    {{- end }}
+  {{- end -}}
+  {{- end }}
+  selector:
+    {{- include "telegraf.selectorLabels" . | nindent 4 }}
+{{- end -}}
+
+==> ./templates/serviceaccount.yaml <==
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ template "telegraf.serviceAccountName" . }}
+  labels:
+    {{- include "telegraf.labels" . | nindent 4 }}
+  {{- if .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml .Values.serviceAccount.annotations | nindent 4 }}
+  {{- end }}
+{{- end }}
+
+==> ./ci/complex-values.yaml <==
+## this config requires v2 config templates to render valid configuration (tplVersion, see at the end)
+config:
+  processors:
+    - enum:
+        # this is wrong mapping copied from values.yaml to test compatibility hack in v2 code
+        mapping:
+          field: "status"
+          dest: "status_code"
+          value_mappings:
+            healthy: 1
+            problem: 2
+            critical: 3
+    # issue 119
+    - enum:
+        order: 1
+        mapping:
+          - field: system_location_section
+            dest: system_location_sectionFloorNumber
+            value_mappings:
+              2nd: 2
+              1st: 1
+              Ground: 0
+              Basement: -1
+    - converter:
+        order: 2
+        fields:
+          integer:
+            - system_location_sectionFloorNumber
+    # issue 119
+    - enum:
+        mapping:
+          field: state
+          dest: status_code
+          default: -1
+          value_mappings:
+            RUNNING: 1
+            RUNNABLE: 1
+            SUSPENDED: 2
+            PENDING_CREATE: 3
+            MAINTENANCE: 4
+            UNKNOWN_STATE: 0
+    - converter:
+        fields:
+          integer: ["check_passed", "content_mismatch"]
+          tag: ["error_code", "http_status"]
+  aggregators:
+    # issue 375
+    - basicstats:
+        period: "30s"
+        drop_original: true
+        stats:
+          - "sum"
+        taginclude:
+          - "counter"
+          - "sql_instance"
+        tagpass:
+          counter:
+            - "Blocked tasks"
+            - "CPU usage %"
+            - "Used memory (KB)"
+  inputs:
+    - cpu:
+    # issue 382
+    - statsd:
+        service_address: ":8125"
+        percentiles:
+          - 50
+          - 95
+          - 99
+          - 99.5
+        metric_separator: "_"
+        allowed_pending_messages: 10000
+        percentile_limit: 1000
+    # issue 111
+    - postgresql_extensible:
+        address: "host=localhost user=postgres sslmode=disable"
+        query:
+          - sqlquery: "SELECT count(*) as total_user_count FROM users"
+            version: 801
+          - sqlquery: "SELECT count(*) as total_post_count FROM posts"
+            version: 801
+    # issue 433
+    - mqtt_consumer:
+        qos: 0
+        servers:
+          - "tcp://mqtt.eclipseprojects.io:1883"
+        topics:
+          - "telegraf/host01/cpu"
+          - "telegraf/+/mem"
+          - "sensors/#"
+        topic_parsing:
+          - topic: "telegraf/one/cpu/23"
+            measurement: "_/_/measurement/_"
+            types:
+              test: "int"
+        data_format: "json_v2"
+        json_v2:
+          - measurement_name: ""
+            timestamp_path: ""
+            object:
+              - path: "@this"
+                tags:
+                  - "device"
+                  - "data.type"
+                  - "owner"
+                field:
+                  - path: ""
+                    type: "int"
+    # issue 429
+    - modbus:
+        name: "PS MAIN ENGINE"
+        controller: 'tcp://127.0.0.1:502'
+        slave_id: 1
+        holding_registers:
+          - name: "Coolant Level"
+            byte_order: CDAB
+            data_type: FLOAT32
+            scale: 0.001
+            address: [51410, 51411]
+  outputs:
+    - file:
+        files:
+          - "stdout"
+
+## Use tpl v2 templates
+tplVersion: 2
+
+==> ./ci/default-values.yaml <==
+# Default values only, no overrides
+
+==> ./ci/inputs-nested-tables-list-values.yaml <==
+config:
+  inputs:
+    - statsd:
+        service_address: ":8125"
+        percentiles:
+          - 50
+          - 95
+          - 99
+        metric_separator: "_"
+        allowed_pending_messages: 10000
+        percentile_limit: 1000
+    - postgresql_extensible:
+        address: "host=localhost user=postgres sslmode=disable"
+        query:
+          - sqlquery: "SELECT count(*) as total_user_count FROM users"
+            version: 801
+          - sqlquery: "SELECT count(*) as total_post_count FROM posts"
+            version: 801
+
+==> ./ci/metrics-health-enabled-values.yaml <==
+metrics:
+  health:
+    enabled: true
+
+==> ./ci/tpl-pod-annotations-values.yaml <==
+# Validates that podAnnotations values are evaluated through tpl(),
+# allowing Helm template expressions such as {{ .Release.Name }}.
+podAnnotations:
+  example.io/release: "{{ .Release.Name }}"
+  example.io/namespace: "{{ .Release.Namespace }}"

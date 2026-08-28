@@ -1,0 +1,178 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 683,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": []
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 30,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "pretifyLog": true,
+        "showCommonLabels": false,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{k8s_namespace_name=\"$namespace\", k8s_deployment_name=~\"$deployment\", k8s_pod_name=~\"$pod\"} |~ \"(?i)$search\" | line_format \"[{{.k8s_pod_name}}] {{__line__}}\" | regexp \"trace_id=(?P<trace_id>[a-f0-9_]+)\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Viewer - $deployment",
+      "type": "logs"
+    }
+  ],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 42,
+  "tags": [
+    "logging",
+    "k8s",
+    "otel"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "local-k8s-helm-loki",
+          "value": "ffjy9tnc34q2ob"
+        },
+        "label": "Loki Source",
+        "name": "datasource",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "app-vhht",
+          "value": "app-vhht"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(k8s_namespace_name)",
+        "includeAll": false,
+        "label": "Namespace",
+        "name": "namespace",
+        "options": [],
+        "query": "label_values(k8s_namespace_name)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values({k8s_namespace_name=\"$namespace\"}, k8s_deployment_name)",
+        "includeAll": true,
+        "label": "Deployment",
+        "multi": true,
+        "name": "deployment",
+        "options": [],
+        "query": "label_values({k8s_namespace_name=\"$namespace\"}, k8s_deployment_name)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values({k8s_namespace_name=\"$namespace\", k8s_deployment_name=~\"$deployment\"}, k8s_pod_name)",
+        "includeAll": true,
+        "label": "Pod",
+        "multi": true,
+        "name": "pod",
+        "options": [],
+        "query": "label_values({k8s_namespace_name=\"$namespace\", k8s_deployment_name=~\"$deployment\"}, k8s_pod_name)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "63d43d9456d6ba6744378673564f02e7",
+          "value": "63d43d9456d6ba6744378673564f02e7"
+        },
+        "label": "Search Text",
+        "name": "search",
+        "options": [],
+        "query": "",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Loki Log - Tempo Trace",
+  "uid": "app-logs-otel-v1",
+  "version": 1
+}

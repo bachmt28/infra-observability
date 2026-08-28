@@ -1,0 +1,140 @@
+## Custom values.yaml for Telegraf -> OpenTelemetry
+replicaCount: 1
+
+image:
+  repo: "docker.io/library/telegraf"
+  tag: "1.38-alpine"
+  pullPolicy: IfNotPresent
+
+podAnnotations: {}
+podLabels: {}
+imagePullSecrets: []
+args: []
+initContainers: []
+
+env:
+  - name: HOSTNAME
+    value: "telegraf.app-otel"
+
+resources:
+  limits:
+    memory: 512Mi
+    cpu: 500m
+  requests:
+    memory: 256Mi
+    cpu: 200m
+
+nodeSelector: {}
+affinity: {}
+tolerations: []
+updateStrategy: {}
+
+service:
+  enabled: true
+  type: LoadBalancer
+  annotations: {}
+
+rbac:
+  create: true
+  clusterWide: false
+  rules: []
+
+serviceAccount:
+  create: true
+  name:
+  annotations: {}
+
+## Telegraf config
+config:
+  agent:
+    interval: "10s"
+    round_interval: true
+    metric_batch_size: 1000
+    metric_buffer_limit: 10000
+    collection_jitter: "0s"
+    flush_interval: "10s"
+    flush_jitter: "0s"
+    precision: ""
+    debug: true                          # bật debug để mày thấy log rõ
+    quiet: false
+    logfile: ""
+    hostname: "$HOSTNAME"
+    omit_hostname: false
+
+  processors:
+    - enum:
+        mapping:
+          fields: 
+          - "status"
+          - "hostname"
+          dest: "status_code"
+          value_mappings:
+            healthy: 1
+            problem: 2
+            critical: 3
+
+  outputs:
+          #    - file:
+          #files: ["stdout"]
+          #data_format: "influx"
+    - opentelemetry:
+        service_address: "otel-deploy-gateway-collector.app-otel.svc.cluster.local:4317"
+
+  inputs:
+    - socket_listener:
+        service_address: "tcp://:8081"
+        data_format: "json"
+        json_query: ""
+        name_override: "njmon"
+        tag_keys:
+          # Định danh server
+          - "identity_hostname"
+          - "identity_ipaddress"
+          - "tags_serial_no_tag"
+          - "server_lpar_number_name"
+          # Định danh thành phần (nhờ Telegraf tự bóc từ key của JSON)
+          - "cpu"
+          - "disk"
+          - "mount"
+          - "device"
+          - "interface"
+          - "vgname"
+          - "type"
+        tags:
+          os_platform: "aix"
+          env: "dtu"
+          source_metric: "telegraf"
+
+    - http_listener_v2:
+        service_address: ":8080"
+        paths: ["/dtu-core-app-db"]
+        methods: ["POST"]
+        data_format: "json"
+        name_override: "njmon_db"
+        
+        # --- ĐÂY LÀ ĐOẠN CẦN THÊM ---
+        # Khai báo các trường trong JSON mà Đại ca muốn nó biến thành Label (Tag)
+        tag_keys: 
+          - "hostname"
+          - "status"
+        # ----------------------------
+
+        tags:
+          org: "example-org"
+          system: "t24"
+          app: "db"
+          env: "dtu"
+          input_type: "json"
+
+metrics:
+  health:
+    enabled: false
+    service_address: "http://:8888"
+    threshold: 5000.0
+  internal:
+    enabled: true
+    collect_memstats: false
+
+pdb:
+  create: true
+  minAvailable: 1

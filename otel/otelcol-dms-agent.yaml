@@ -1,0 +1,190 @@
+﻿apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  creationTimestamp: "2026-05-08T08:24:47Z"
+  generation: 1
+  name: otel-dms-agent
+  namespace: app-otel
+  resourceVersion: "1156166359"
+  uid: 4a45106b-a9b5-4db1-b7df-0ae6927f1144
+spec:
+  config:
+    exporters:
+      loadbalancing:
+        protocol:
+          otlp:
+            timeout: 1s
+            tls:
+              insecure: true
+        resolver:
+          dns:
+            hostname: otel-deploy-gateway-collector.app-otel.svc.cluster.local
+            port: "4317"
+    processors:
+      batch:
+        send_batch_size: 1000
+        timeout: 1s
+      k8s_attributes:
+        auth_type: serviceAccount
+        extract:
+          metadata:
+          - k8s.pod.name
+          - k8s.namespace.name
+          - k8s.deployment.name
+          - k8s.statefulset.name
+          - k8s.daemonset.name
+          - k8s.cronjob.name
+          - k8s.job.name
+          - k8s.node.name
+        passthrough: false
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.name
+          - from: resource_attribute
+            name: k8s.namespace.name
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      transform/masking:
+        error_mode: ignore
+        log_statements:
+        - context: log
+          statements:
+          - replace_pattern(body, "<otp>\\d{1,3}</otp>", "<otp>***</otp>") where IsString(body)
+          - replace_pattern(body, "<otp>(\\d{2})\\d+(\\d)</otp>", "<otp>$1***$2</otp>")
+            where IsString(body)
+    receivers:
+      filelog:
+        exclude:
+        - /var/log/containers/*kube-system*.log
+        - /var/log/containers/*_app-otel_*.log
+        include:
+        - /var/log/containers/*_app-*_*.log
+        include_file_path: true
+        operators:
+        - id: extract-metadata-from-filepath
+          parse_from: attributes["log.file.path"]
+          regex: ^/var/log/containers/(?P<k8s_pod_name>[^_]+)_(?P<k8s_namespace_name>[^_]+)_(?P<k8s_container_name>.+)-(?P<k8s_container_id>[a-z0-9]{64})\.log$
+          type: regex_parser
+        - from: attributes.k8s_pod_name
+          to: resource["k8s.pod.name"]
+          type: move
+        - from: attributes.k8s_namespace_name
+          to: resource["k8s.namespace.name"]
+          type: move
+        - from: attributes.k8s_container_name
+          to: resource["k8s.container.name"]
+          type: move
+        - id: manual-cri-parser
+          if: body matches "^[^ ]+ (stdout|stderr)"
+          regex: ^(?P<time>[^ ]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]+) ?(?P<log_message>.*)$
+          type: regex_parser
+        - id: trace-extractor
+          if: attributes.log_message matches "trace_id=[a-f0-9]{32}"
+          parse_from: attributes.log_message
+          regex: trace_id=(?P<trace_id>[a-f0-9]{32})
+          type: regex_parser
+        - from: attributes.log_message
+          if: attributes.log_message != nil
+          to: body
+          type: move
+        start_at: end
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    service:
+      pipelines:
+        logs:
+          exporters:
+          - loadbalancing
+          processors:
+          - memory_limiter
+          - k8s_attributes
+          - transform/masking
+          - batch
+          receivers:
+          - filelog
+          - otlp
+        metrics:
+          exporters:
+          - loadbalancing
+          processors:
+          - memory_limiter
+          - k8s_attributes
+          - batch
+          receivers:
+          - otlp
+        traces:
+          exporters:
+          - loadbalancing
+          processors:
+          - memory_limiter
+          - k8s_attributes
+          - batch
+          receivers:
+          - otlp
+      telemetry:
+        metrics:
+          readers:
+          - pull:
+              exporter:
+                prometheus:
+                  host: 0.0.0.0
+                  port: 8888
+  configVersions: 3
+  daemonSetUpdateStrategy: {}
+  deploymentUpdateStrategy: {}
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.148.0
+  ingress:
+    route: {}
+  ipFamilyPolicy: SingleStack
+  managementState: managed
+  mode: daemonset
+  networkPolicy: {}
+  observability:
+    metrics: {}
+  podDnsConfig: {}
+  podManagementPolicy: Parallel
+  replicas: 1
+  resources: {}
+  targetAllocator:
+    allocationStrategy: consistent-hashing
+    collectorNotReadyGracePeriod: 30s
+    collectorTargetReloadInterval: 30s
+    filterStrategy: relabel-config
+    observability:
+      metrics: {}
+    prometheusCR:
+      evaluationInterval: 30s
+      podMonitorNamespaceSelector: {}
+      probeNamespaceSelector: {}
+      scrapeConfigNamespaceSelector: {}
+      scrapeInterval: 30s
+      serviceMonitorNamespaceSelector: {}
+    resources: {}
+  tolerations:
+  - effect: NoSchedule
+    operator: Exists
+  - effect: NoExecute
+    operator: Exists
+  upgradeStrategy: automatic
+  volumeMounts:
+  - mountPath: /var/log
+    name: varlog
+    readOnly: true
+  volumes:
+  - hostPath:
+      path: /var/log
+    name: varlog
+status:
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.148.0
+  scale:
+    replicas: 52
+    selector: app.kubernetes.io/component=opentelemetry-collector,app.kubernetes.io/instance=app-otel.otel-dms-agent,app.kubernetes.io/managed-by=opentelemetry-operator,app.kubernetes.io/name=otel-dms-agent-collector,app.kubernetes.io/part-of=opentelemetry,app.kubernetes.io/version=0.148.0
+    statusReplicas: 52/52
+  version: 0.148.0

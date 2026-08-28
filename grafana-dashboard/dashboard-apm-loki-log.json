@@ -1,0 +1,113 @@
+{
+  "id": null,
+  "uid": "loki-log-explorer",
+  "title": "APM - Loki Log",
+  "tags": ["logging", "k8s", "otel"],
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 42,
+  "timezone": "",
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "current": { "text": "", "value": "" },
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values(k8s_namespace_name)",
+        "includeAll": false,
+        "label": "Namespace",
+        "name": "namespace",
+        "options": [],
+        "query": "label_values(k8s_namespace_name)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": { "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\"}, workload)",
+        "includeAll": true,
+        "label": "Workload",
+        "multi": true,
+        "name": "workload",
+        "options": [],
+        "query": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\"}, workload)",
+        "refresh": 1,
+        "type": "query",
+        "description": "Lay tu recording rule kube-state-metrics, gom san Deployment/StatefulSet/DaemonSet/Job/CronJob thanh 1 danh sach workload day du."
+      },
+      {
+        "current": { "text": "All", "value": "$__all" },
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values({k8s_namespace_name=\"$namespace\"}, k8s_pod_name)",
+        "includeAll": true,
+        "label": "Pod",
+        "multi": true,
+        "name": "pod",
+        "options": [],
+        "query": "label_values({k8s_namespace_name=\"$namespace\"}, k8s_pod_name)",
+        "refresh": 1,
+        "type": "query",
+        "description": "Loki khong cho loc theo workload o buoc lay danh sach pod (API chi nhan pure label matcher), nen list ra ca namespace - ten pod luon co prefix ten workload nen van chon dung de dang."
+      },
+      {
+        "current": { "text": "", "value": "" },
+        "label": "Search Text",
+        "name": "search",
+        "options": [],
+        "query": "",
+        "type": "textbox"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "Log Viewer - $workload",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 30 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "pretifyLog": true,
+        "showCommonLabels": false,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "direction": "backward",
+          "editorMode": "code",
+          "queryType": "range",
+          "expr": "{k8s_namespace_name=\"$namespace\"} | (k8s_deployment_name=~\"$workload\" or k8s_statefulset_name=~\"$workload\" or k8s_daemonset_name=~\"$workload\" or k8s_cronjob_name=~\"$workload\" or k8s_job_name=~\"$workload\") and k8s_pod_name=~\"$pod\" |~ \"(?i)$search\" | line_format \"[{{.k8s_pod_name}}] {{__line__}}\""
+        }
+      ]
+    }
+  ],
+  "version": 1
+}

@@ -1,0 +1,264 @@
+﻿apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  creationTimestamp: "2026-05-08T09:17:08Z"
+  generation: 18
+  name: otel-deploy-gateway
+  namespace: app-otel
+  resourceVersion: "1033106767"
+  uid: 087d242d-e942-4ea3-a719-60005692e650
+spec:
+  config:
+    exporters:
+      debug:
+        verbosity: basic
+      kafka/logs:
+        brokers:
+        - kafka-broker01.example.com:9094
+        - kafka-broker02.example.com:9094
+        - kafka-broker03.example.com:9094
+        logs:
+          encoding: otlp_json
+          topic: OTEL_CORE_AIX_LOGS
+        producer:
+          compression: snappy
+          max_message_bytes: 1000000
+          required_acks: 1
+        protocol_version: 2.8.0
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 120s
+          max_interval: 30s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 1000
+        timeout: 5s
+      kafka/metrics:
+        brokers:
+        - kafka-broker01.example.com:9094
+        - kafka-broker02.example.com:9094
+        - kafka-broker03.example.com:9094
+        metrics:
+          encoding: otlp_json
+          topic: OTEL_CORE_AIX_METRICS
+        producer:
+          compression: snappy
+          required_acks: 1
+        protocol_version: 2.8.0
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 120s
+          max_interval: 30s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 1000
+        timeout: 5s
+      kafka/traces:
+        brokers:
+        - kafka-broker01.example.com:9094
+        - kafka-broker02.example.com:9094
+        - kafka-broker03.example.com:9094
+        producer:
+          compression: snappy
+          required_acks: 1
+        protocol_version: 2.8.0
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 120s
+          max_interval: 30s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 1000
+        timeout: 5s
+        traces:
+          encoding: otlp_json
+          topic: OTEL_CORE_AIX_TRACES
+      otlp_grpc/logmon:
+        endpoint: 10.10.0.21:14317
+        tls:
+          insecure: true
+      otlp_grpc/netdata:
+        endpoint: 10.10.0.21:4317
+        tls:
+          insecure: true
+      otlp_grpc/tempo:
+        endpoint: tempo-gateway.app-otel.svc.cluster.local:4317
+        tls:
+          insecure: true
+      otlp_http/loki:
+        endpoint: http://loki-gateway.app-otel.svc.cluster.local/otlp
+        tls:
+          insecure: true
+      prometheusremotewrite:
+        endpoint: http://kube-prometheus-stack-prometheus.app-kube-pg-stack.svc.cluster.local:9090/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
+    processors:
+      attributes/cluster_name:
+        actions:
+        - action: insert
+          key: k8s.cluster.name
+          value: k8s-cluster-example
+      batch:
+        send_batch_max_size: 40
+        send_batch_size: 40
+        timeout: 200ms
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      tail_sampling:
+        decision_wait: 10s
+        expected_new_traces_per_sec: 1000
+        num_traces: 50000
+        policies:
+        - name: keep-errors
+          status_code:
+            status_codes:
+            - ERROR
+          type: status_code
+        - name: probabilistic-10percent
+          probabilistic:
+            sampling_percentage: 10
+          type: probabilistic
+      transform/fix_loki_labels:
+        log_statements:
+        - context: resource
+          statements:
+          - replace_all_patterns(attributes, "key", "\\.", "_")
+      transform/truncate_logs:
+        error_mode: ignore
+        log_statements:
+        - context: log
+          statements:
+          - set(body, Substring(body, 0, 65536)) where IsString(body) and Len(body)
+            > 65536
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      syslog/tcp:
+        operators:
+        - from: attributes["hostname"]
+          to: resource["service.name"]
+          type: copy
+        - field: resource["log.source"]
+          type: add
+          value: syslog-tcp
+        protocol: rfc5424
+        tcp:
+          listen_address: 0.0.0.0:54527
+      syslog/udp:
+        operators:
+        - from: attributes["hostname"]
+          to: resource["service.name"]
+          type: copy
+        - field: resource["log.source"]
+          type: add
+          value: syslog-udp
+        protocol: rfc5424
+        udp:
+          listen_address: 0.0.0.0:54527
+    service:
+      pipelines:
+        logs:
+          exporters:
+          - debug
+          - otlp_http/loki
+          - kafka/logs
+          - otlp_grpc/logmon
+          processors:
+          - memory_limiter
+          - attributes/cluster_name
+          - transform/truncate_logs
+          - batch
+          receivers:
+          - otlp
+          - syslog/tcp
+          - syslog/udp
+        metrics:
+          exporters:
+          - prometheusremotewrite
+          - kafka/metrics
+          - otlp_grpc/netdata
+          processors:
+          - memory_limiter
+          - attributes/cluster_name
+          - batch
+          receivers:
+          - otlp
+        traces:
+          exporters:
+          - otlp_grpc/tempo
+          - kafka/traces
+          processors:
+          - memory_limiter
+          - attributes/cluster_name
+          - batch
+          receivers:
+          - otlp
+      telemetry:
+        metrics:
+          readers:
+          - pull:
+              exporter:
+                prometheus:
+                  host: 0.0.0.0
+                  port: 8888
+  configVersions: 3
+  daemonSetUpdateStrategy: {}
+  deploymentUpdateStrategy: {}
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.148.0
+  ingress:
+    route: {}
+  ipFamilyPolicy: SingleStack
+  managementState: managed
+  mode: deployment
+  networkPolicy: {}
+  observability:
+    metrics: {}
+  podDnsConfig: {}
+  podManagementPolicy: Parallel
+  ports:
+  - name: syslog-tcp
+    port: 54527
+    protocol: TCP
+    targetPort: 54527
+  - name: syslog-udp
+    port: 54527
+    protocol: UDP
+    targetPort: 54527
+  replicas: 1
+  resources: {}
+  targetAllocator:
+    allocationStrategy: consistent-hashing
+    collectorNotReadyGracePeriod: 30s
+    collectorTargetReloadInterval: 30s
+    filterStrategy: relabel-config
+    observability:
+      metrics: {}
+    prometheusCR:
+      evaluationInterval: 30s
+      podMonitorNamespaceSelector: {}
+      probeNamespaceSelector: {}
+      scrapeConfigNamespaceSelector: {}
+      scrapeInterval: 30s
+      serviceMonitorNamespaceSelector: {}
+    resources: {}
+  upgradeStrategy: automatic
+status:
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.148.0
+  scale:
+    replicas: 1
+    selector: app.kubernetes.io/component=opentelemetry-collector,app.kubernetes.io/instance=app-otel.otel-deploy-gateway,app.kubernetes.io/managed-by=opentelemetry-operator,app.kubernetes.io/name=otel-deploy-gateway-collector,app.kubernetes.io/part-of=opentelemetry,app.kubernetes.io/version=0.148.0
+    statusReplicas: 1/1
+  version: 0.148.0

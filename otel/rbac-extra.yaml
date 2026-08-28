@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-agent-metadata-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods", "namespaces", "nodes"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["apps"]
+  resources: ["replicasets"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-agent-metadata-reader-binding
+subjects:
+- kind: ServiceAccount
+  name: otel-dms-agent-collector # Đúng tên SA báo trong log
+  namespace: app-otel
+roleRef:
+  kind: ClusterRole
+  name: otel-agent-metadata-reader
+  apiGroup: rbac.authorization.k8s.io
