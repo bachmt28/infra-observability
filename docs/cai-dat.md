@@ -48,12 +48,6 @@ kubectl apply -f otel/opentelemetry-operator.yaml
 kubectl apply -f otel/rbac-extra.yaml
 ```
 
-**Trước khi apply 2 CR bên dưới trên cluster mới:** file hiện tại là bản pull sống từ cluster đang
-chạy (`kubectl get opentelemetrycollector -o yaml`), có kèm `metadata.resourceVersion`/`uid`/
-`creationTimestamp` và cả block `status` — các field này K8s API không chấp nhận khi tạo mới. Xoá
-4 field đó (`resourceVersion`, `uid`, `creationTimestamp`, `status`) khỏi file trước khi apply lần
-đầu trên cluster chưa có object này.
-
 ```sh
 kubectl apply -f otel/otelcol-deploy-gateway.yaml
 kubectl apply -f otel/otelcol-dms-agent.yaml
@@ -77,7 +71,7 @@ helm install tempo grafana/tempo-distributed --version 1.61.3 \
 ```
 
 **Trước khi cài:** điền `storage.trace.s3.access_key`/`secret_key` trong `tempo/values.yaml`
-(bucket `dtu-otel-traces`, endpoint `s3.example.com`) trước khi `helm install`.
+(bucket `dtu-otel-traces`, endpoint `uat-dc2ecs01.seauat.com.vn`) trước khi `helm install`.
 
 Cài xong không cần sửa gì ở `otel-deploy-gateway` — pipeline traces đã sẵn cấu hình trỏ
 `tempo-gateway.app-otel.svc.cluster.local:4317`, chỉ cần service đó tồn tại là tự thông ngay.

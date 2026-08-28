@@ -1,12 +1,8 @@
 ﻿apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
-  creationTimestamp: "2026-05-08T08:24:47Z"
-  generation: 1
   name: otel-dms-agent
   namespace: app-otel
-  resourceVersion: "1156166359"
-  uid: 4a45106b-a9b5-4db1-b7df-0ae6927f1144
 spec:
   config:
     exporters:
@@ -181,10 +177,3 @@ spec:
   - hostPath:
       path: /var/log
     name: varlog
-status:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.148.0
-  scale:
-    replicas: 52
-    selector: app.kubernetes.io/component=opentelemetry-collector,app.kubernetes.io/instance=app-otel.otel-dms-agent,app.kubernetes.io/managed-by=opentelemetry-operator,app.kubernetes.io/name=otel-dms-agent-collector,app.kubernetes.io/part-of=opentelemetry,app.kubernetes.io/version=0.148.0
-    statusReplicas: 52/52
-  version: 0.148.0

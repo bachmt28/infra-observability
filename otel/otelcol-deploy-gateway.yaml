@@ -1,12 +1,8 @@
 ﻿apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
-  creationTimestamp: "2026-05-08T09:17:08Z"
-  generation: 18
   name: otel-deploy-gateway
   namespace: app-otel
-  resourceVersion: "1033106767"
-  uid: 087d242d-e942-4ea3-a719-60005692e650
 spec:
   config:
     exporters:
@@ -255,10 +251,3 @@ spec:
       serviceMonitorNamespaceSelector: {}
     resources: {}
   upgradeStrategy: automatic
-status:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.148.0
-  scale:
-    replicas: 1
-    selector: app.kubernetes.io/component=opentelemetry-collector,app.kubernetes.io/instance=app-otel.otel-deploy-gateway,app.kubernetes.io/managed-by=opentelemetry-operator,app.kubernetes.io/name=otel-deploy-gateway-collector,app.kubernetes.io/part-of=opentelemetry,app.kubernetes.io/version=0.148.0
-    statusReplicas: 1/1
-  version: 0.148.0
